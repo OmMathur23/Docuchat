@@ -1,27 +1,15 @@
-from fastapi import FastAPI, Depends
-from pydantic import BaseModel
-from database import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import FastAPI
 
-class DocumentCreate(BaseModel):
-    title : str
-    content : str
-
+from routers.auth import router as auth_router
+from routers.documents import router as document_router
 
 app = FastAPI()
 
+
 @app.get("/")
 def home():
-    return {"message" : "The forest is red."}
+    return {"message": "The forest is red."}
 
-@app.get("/documents/{document_id}")
-def doc(document_id: int):
-    return {"document_id": document_id, "title": "placeholder"}
 
-@app.get('/documents')
-async def skip(skip : int = 0, limit : int = 10, db: AsyncSession = Depends(get_db)):
-    return {"skip": skip, "limit" : limit}
-
-@app.post("/items")
-def create_doc(doc: DocumentCreate):
-    return doc
+app.include_router(auth_router)
+app.include_router(document_router)
