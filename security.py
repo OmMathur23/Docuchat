@@ -63,7 +63,7 @@ async def get_current_user(token = Depends(oauth2_scheme), db: AsyncSession = De
                 detail="Could not validate credentials"
             )
         except JWTError:
-             raise Exception(
+             raise HTTPException(
                   status_code = 401,
                   detail= "Could not validate credentials"
              )
