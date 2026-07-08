@@ -6,6 +6,11 @@ from database import get_db
 from models import Document
 from sqlalchemy import select
 from pypdf import PdfReader
+from rag.chunker import chunk_text
+from rag.embedder import embed_chunks, get_client
+from fastapi.concurrency import run_in_threadpool
+
+gemini_client = get_client()
 
 router = APIRouter(
     prefix="/documents",
@@ -108,5 +113,7 @@ async def upload_document(
     db.add(new_doc)
     await db.commit()
     await db.refresh(new_doc)
+    chunks  = chunk_text(text)
+    embeddings = await run_in_threadpool(embed_chunks, gemini_client, chunks)
     return new_doc
 
