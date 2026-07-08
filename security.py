@@ -1,4 +1,5 @@
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from jose import jwt, JWTError
 from datetime import timedelta, datetime, UTC
 from dotenv import load_dotenv
@@ -14,8 +15,7 @@ load_dotenv()
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")) #int because os.getenv always returns a string but timedelta expects int
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
-pwd_context = CryptContext(schemes = ["bcrypt"], deprecated = "auto") #creating an object of class CryptoContext with encrypting algo = bcrpyt (widely used and reliable algorithm)
-
+ph = PasswordHasher()
 #creating an OAuth2PasswordBearer class object, helps pick 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl= "/auth/login"  #the endpoint which assigns the token
@@ -78,10 +78,14 @@ async def get_current_user(token = Depends(oauth2_scheme), db: AsyncSession = De
             )
         return db_user
 def hash_password(password:str)->str:
-    return pwd_context.hash(password)
+    return ph.hash(password)
 
 def verify_password(plain_password:str, hashed_password: str)->bool:
-    return pwd_context.verify(plain_password,hashed_password)
+    try:
+         ph.verify(hashed_password,plain_password)
+         return True
+    except VerifyMismatchError:
+         return False
 
 def create_access_token(data: dict)->str:
     to_encode = data.copy() #creates a new dictionary to_encode which points to a different memory location than data

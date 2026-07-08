@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile , File
 from sqlalchemy.ext.asyncio import AsyncSession
 from security import get_current_user
 from schemas import DocumentCreate
@@ -59,7 +59,7 @@ async def get_document(
         Document.id == document_id,
         Document.user_id == user.id
     )
-    
+
     result = await db.execute(query)
     document = result.scalar_one_or_none()
 
@@ -71,6 +71,28 @@ async def get_document(
 
     return document
     
-
-
+'''
+file: UploadFile = File(...) , UploadFile tells FastAPI this parameter is a file being uploaded 
+File(...)-> Expect this value from multipart/form-data, not JSON.
+multipart/form-data → This format is used when forms send files or mixed data (text + files). 
+For example, uploading a profile picture along with your name.
+'''
+@router.post("/upload")
+async def upload_document(
+    file : UploadFile, 
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    content = await file.read() #reading a file is an asynchronous operation, so we wait until it's finished.
+    #await file.read() loads the whole uploaded file into memory as bytes, so notes.txt with "Hello\nFastAPI" becomes b"Hello\nFastAPI" because files are transferred as bytes, not strings
+    text = content.decode("utf-8")
+    new_doc = Document(
+        title = file.filename,
+        content = text,
+        user_id = user.id
+    )
+    db.add(new_doc)
+    await db.commit()
+    await db.refresh(new_doc)
+    return new_doc
 
