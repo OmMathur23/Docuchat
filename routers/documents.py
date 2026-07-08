@@ -5,6 +5,7 @@ from schemas import DocumentCreate
 from database import get_db
 from models import Document
 from sqlalchemy import select
+from pypdf import PdfReader
 
 router = APIRouter(
     prefix="/documents",
@@ -82,10 +83,23 @@ async def upload_document(
     file : UploadFile, 
     db: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
-):
-    content = await file.read() #reading a file is an asynchronous operation, so we wait until it's finished.
+):   
+    if file.filename.endswith(".txt"):
+        content = await file.read() #reading a file is an asynchronous operation, so we wait until it's finished.
     #await file.read() loads the whole uploaded file into memory as bytes, so notes.txt with "Hello\nFastAPI" becomes b"Hello\nFastAPI" because files are transferred as bytes, not strings
-    text = content.decode("utf-8")
+        text = content.decode("utf-8")
+    elif file.filename.endswith(".pdf"):
+        reader = PdfReader(file.file)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text: 
+                text += page_text + '\n'
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail = "Unsupported File Type"
+        )
     new_doc = Document(
         title = file.filename,
         content = text,
