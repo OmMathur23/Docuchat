@@ -48,5 +48,29 @@ async def create_documents(
     await db.refresh(new_document) #the row has been saved in the database, but the Python object (new_document) may not yet have the latest values that the database generated, such as:id(check model Document)
     return new_document
 
+#/{document_id} is a path parameter, whatever value in URL appears after /document is taken as document_id then we convert it by type hint in function definition
+@router.get("/{document_id}") #GET /documents/{id}-> user fetching a particular doc by its id, fetching allowed only if he owns it
+async def get_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user)    
+):
+    query = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user.id
+    )
+    
+    result = await db.execute(query)
+    document = result.scalar_one_or_none()
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found"
+        )
+
+    return document
+    
+
 
 
