@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile , File
 from sqlalchemy.ext.asyncio import AsyncSession
 from security import get_current_user
-from schemas import DocumentCreate
+from schemas import DocumentCreate, AskRequest
 from database import get_db
 from models import Document
 from sqlalchemy import select
-from pypdf import PdfReader
+import pdfplumber
 from rag.chunker import chunk_text
-from rag.embedder import embed_chunks, get_client
+from rag.embedder import embed_chunks, get_client, embed_query
 from fastapi.concurrency import run_in_threadpool
+from rag.vector_store import ChromaVectorStore
+from rag.generator import generate_answer
 
 gemini_client = get_client()
+vector_store = ChromaVectorStore()
 
 router = APIRouter(
     prefix="/documents",
@@ -89,22 +92,20 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):   
+    u_id = user.id #need it in threadpool, before it db.commit shuts down every ORM object attached to the session
     if file.filename.endswith(".txt"):
         content = await file.read() #reading a file is an asynchronous operation, so we wait until it's finished.
     #await file.read() loads the whole uploaded file into memory as bytes, so notes.txt with "Hello\nFastAPI" becomes b"Hello\nFastAPI" because files are transferred as bytes, not strings
         text = content.decode("utf-8")
     elif file.filename.endswith(".pdf"):
-        reader = PdfReader(file.file)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text: 
-                text += page_text + '\n'
+        with pdfplumber.open(file.file) as pdf:
+            pages_text = [page.extract_text() or "" for page in pdf.pages]
+        text = "\n".join(pages_text)
     else:
         raise HTTPException(
-            status_code=400,
-            detail = "Unsupported File Type"
-        )
+                status_code=400,
+                detail = "Unsupported File Type"
+            )
     new_doc = Document(
         title = file.filename,
         content = text,
@@ -113,7 +114,44 @@ async def upload_document(
     db.add(new_doc)
     await db.commit()
     await db.refresh(new_doc)
-    chunks  = chunk_text(text)
+    chunks = chunk_text(text)
+    '''
+    run_in_threadpool() is a FastAPI utility (from Starlette) that lets you safely 
+    run blocking or synchronous functions (BASICALLY, ALL RAG FUNCTIONS HERE)(ALL DB CALLS ARE ASYNCHRONOUS OTOH)
+    inside a thread pool without freezing the main async event loop.
+    You use it when you need to call regular Python functions (like file I/O, database drivers, or CPU-heavy tasks) inside an async route handler.
+    '''
     embeddings = await run_in_threadpool(embed_chunks, gemini_client, chunks)
+    await run_in_threadpool(
+            vector_store.add_chunks, chunks, embeddings, u_id, new_doc.id
+        )
     return new_doc
+
+@router.post("/{document_id}/ask")
+async def ask_question(
+    document_id :int ,
+    body : AskRequest,
+    db:AsyncSession= Depends(get_db),
+    user = Depends(get_current_user),
+):
+    u_id = user.id #capture before any potential commit; same lesson as before
+    query = select(Document).where(
+        Document.user_id == u_id,
+        Document.id == document_id
+    )
+    result = await db.execute(query)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(
+            status_code=404,
+            detail= "Document not found"
+        )
+    
+    qv = await run_in_threadpool(embed_query,gemini_client,body.question)
+    sources = await run_in_threadpool(vector_store.search, qv,u_id, document_id, top_k=3)
+    answer = await run_in_threadpool(generate_answer, gemini_client, body.question,sources)
+    return {
+        "answer": answer,
+        "sources": sources,  # each has text + similarity
+    }   
 

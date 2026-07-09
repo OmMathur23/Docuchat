@@ -11,3 +11,6 @@ class UserLogin(BaseModel):
 class DocumentCreate(BaseModel):
     title: str
     content: str
+
+class AskRequest(BaseModel):
+    question : str

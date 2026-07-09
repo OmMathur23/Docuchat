@@ -19,7 +19,7 @@ def get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def embed_chunks(
+def embed_one(
     client: genai.Client,
     text: str,
     title: str | None = None,
@@ -55,3 +55,21 @@ def embed_chunks(
             time.sleep(wait)
 
 
+def embed_query(client: genai.Client, question: str) -> list[float]:
+    """Convenience wrapper for embedding a user's question at query time."""
+    return embed_one(client, question, task_type="retrieval_query")
+
+
+def embed_chunks(client: genai.Client, chunks: list[dict]) -> list[list[float]]:
+    embeddings = []
+
+    for i, chunk in enumerate(chunks):
+        embedding = embed_one(client, chunk["text"])
+        embeddings.append(embedding)
+
+        if (i + 1) % 25 == 0 or (i + 1) == len(chunks):
+            print(f"{i + 1}/{len(chunks)} chunks embedded")
+
+        time.sleep(0.2)
+
+    return embeddings
