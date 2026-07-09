@@ -5,9 +5,10 @@ class ChromaVectorStore:
         self.collection = client.get_or_create_collection(collection_name)
 
     def search(self, query_vector: list[float], user_id: int, document_id: int | None = None, top_k: int = 5) -> list[dict]:
-        where = {"user_id": user_id}
-        if document_id is not None:   
-            where["document_id"] = document_id
+        if document_id is not None:
+            where = {"$and": [{"user_id": user_id}, {"document_id": document_id}]}
+        else:
+            where = {"user_id": user_id}
 
         results = self.collection.query(
             query_embeddings=[query_vector],
