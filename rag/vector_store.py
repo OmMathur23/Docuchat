@@ -48,3 +48,7 @@ class ChromaVectorStore:
             documents=documents,
             embeddings=embeddings,
         )
+    def delete_document(self, user_id: int, document_id: int):
+        self.collection.delete(
+            where={"$and": [{"user_id": user_id}, {"document_id": document_id}]}
+        )

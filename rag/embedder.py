@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_MODEL = "gemini-embedding-2"
 OUTPUT_DIMENSIONALITY = 768
 MAX_RETRIES = 5
 BASE_BACKOFF_SECONDS = 5
@@ -19,31 +19,15 @@ def get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def embed_one(
-    client: genai.Client,
-    text: str,
-    title: str | None = None,
-    task_type: str = "retrieval_document",
-) -> list[float]:
-    """
-    Embed a single piece of text, with retry/backoff for transient
-    errors (rate limits, temporary server issues).
-
-    task_type matters: Gemini's embedding model produces slightly
-    different vectors depending on which side of the retrieval pair
-    the text is playing - 'retrieval_document' for chunks being
-    indexed, 'retrieval_query' for the question being asked.
-    """
+def _embed(client: genai.Client, prefixed_text: str) -> list[float]:
+    """gemini-embedding-2 takes the task as an inline prompt prefix instead
+    of a task_type config field — see prepare_query/prepare_document below."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            config = types.EmbedContentConfig(
-                task_type=task_type,
-                output_dimensionality=OUTPUT_DIMENSIONALITY,
-                title=title,
-            )
+            config = types.EmbedContentConfig(output_dimensionality=OUTPUT_DIMENSIONALITY)
             result = client.models.embed_content(
                 model=EMBEDDING_MODEL,
-                contents=text,
+                contents=prefixed_text,
                 config=config,
             )
             return result.embeddings[0].values
@@ -56,20 +40,16 @@ def embed_one(
 
 
 def embed_query(client: genai.Client, question: str) -> list[float]:
-    """Convenience wrapper for embedding a user's question at query time."""
-    return embed_one(client, question, task_type="retrieval_query")
+    return _embed(client, f"task: question answering | query: {question}")
 
 
 def embed_chunks(client: genai.Client, chunks: list[dict]) -> list[list[float]]:
     embeddings = []
-
     for i, chunk in enumerate(chunks):
-        embedding = embed_one(client, chunk["text"])
+        title = chunk.get("title", "none")
+        embedding = _embed(client, f"title: {title} | text: {chunk['text']}")
         embeddings.append(embedding)
-
         if (i + 1) % 25 == 0 or (i + 1) == len(chunks):
             print(f"{i + 1}/{len(chunks)} chunks embedded")
-
         time.sleep(0.2)
-
     return embeddings

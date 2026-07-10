@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile , File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile , File, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from security import get_current_user
 from schemas import DocumentCreate, AskRequest
@@ -79,7 +79,32 @@ async def get_document(
         )
 
     return document
-    
+
+
+@router.delete("/{document_id}", status_code=204)  # DELETE /documents/{id} -> remove a document you own, and its indexed chunks
+async def delete_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user),
+):
+    query = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user.id
+    )
+    result = await db.execute(query)
+    doc = result.scalar_one_or_none()
+
+    if doc is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found"
+        )
+
+    await run_in_threadpool(vector_store.delete_document, user.id, document_id)
+    await db.delete(doc)
+    await db.commit()
+    return Response(status_code=204)
+
 '''
 file: UploadFile = File(...) , UploadFile tells FastAPI this parameter is a file being uploaded 
 File(...)-> Expect this value from multipart/form-data, not JSON.
@@ -153,5 +178,4 @@ async def ask_question(
     return {
         "answer": answer,
         "sources": sources,  # each has text + similarity
-    }   
-
+    }
