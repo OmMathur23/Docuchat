@@ -1,15 +1,7 @@
-"""
-Thin wrapper around the DocuChat FastAPI backend.
-Kept dependency-free (just `requests`) and framework-agnostic on purpose,
-so it isn't tied to Streamlit's rerun model.
-"""
-
 import requests
 
 
 class APIError(Exception):
-    """Raised for any non-2xx response, carrying the status code + detail message."""
-
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
         self.detail = detail
@@ -20,8 +12,6 @@ class DocuChatClient:
     def __init__(self, base_url: str, token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.token = token
-
-    # ---------- internals ----------
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.token}"} if self.token else {}
@@ -40,8 +30,6 @@ class DocuChatClient:
             return None
         return resp.json()
 
-    # ---------- auth ----------
-
     def signup(self, email: str, password: str) -> dict:
         resp = requests.post(
             f"{self.base_url}/auth/signup",
@@ -58,8 +46,6 @@ class DocuChatClient:
         )
         return self._handle(resp)
 
-    # ---------- documents ----------
-
     def list_documents(self, limit: int = 100, skip: int = 0) -> list[dict]:
         resp = requests.get(
             f"{self.base_url}/documents/",
@@ -75,7 +61,7 @@ class DocuChatClient:
             f"{self.base_url}/documents/upload",
             headers=self._headers(),
             files=files,
-            timeout=180,  # embedding a long PDF can take a while
+            timeout=180,
         )
         return self._handle(resp)
 

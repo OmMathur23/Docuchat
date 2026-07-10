@@ -1,11 +1,3 @@
-"""
-DocuChat — a Streamlit frontend for the DocuChat RAG API.
-
-Run with:  streamlit run app.py
-Point it at your backend with the DOCUCHAT_API_URL env var
-(defaults to http://localhost:8000).
-"""
-
 import base64
 import html
 import json
@@ -25,17 +17,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# --------------------------------------------------------------------------
-# Design system
-#
-# The idea running through this UI: a RAG answer is only as good as the
-# passages it's grounded in, so "evidence" gets its own visual language —
-# literal highlighter marks — instead of being an afterthought in a footnote.
-# Palette: paper + ink, with a highlighter-yellow accent reserved ONLY for
-# source citations, and a deep teal reserved for actions.
-# --------------------------------------------------------------------------
-
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
